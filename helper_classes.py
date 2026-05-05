@@ -155,12 +155,31 @@ class Triangle(Object3D):
 
     # computes normal to the trainagle surface. Pay attention to its direction!
     def compute_normal(self):
-        # TODO
-        pass
+        vector1 = self.b - self.a
+        vector2 = self.c - self.a
+        normal_vector = np.cross(vector1 , vector2)
+
+        return normalize(normal_vector)
 
     def intersect(self, ray: Ray):
-        # TODO
-        pass
+        v = self.a - ray.origin
+        t = np.dot(v, self.normal) / (np.dot(self.normal, ray.direction) + epsilon)
+        if t <= 0:
+           return None
+        point_on_the_plane = ray.origin + (t * ray.direction)
+
+        triangle = [self.a, self.b, self.c]
+
+        for i in range(3):
+            v1 = triangle[i] - point_on_the_plane
+            v2 = triangle[(i + 1) % 3] - point_on_the_plane
+            product = np.cross(v1,v2)
+            if (self.normal @ product) < 0:
+                return None #It is outside the triangle
+            
+        return t, self
+
+
 
 class Diamond(Object3D):
     """     
