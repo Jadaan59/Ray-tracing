@@ -1,6 +1,6 @@
 import numpy as np
 from abc import ABC, abstractmethod
-
+epsilon = 1e-6
 # This function gets a vector and returns its normalized form.
 def normalize(vector):
     return vector / np.linalg.norm(vector)
@@ -97,15 +97,16 @@ class Ray:
     # The function is getting the collection of objects in the scene and looks for the one with minimum distance.
     # The function should return the nearest object and its distance (in two different arguments)
     def nearest_intersected_object(self, objects):
-        intersections = None
         nearest_object = None
         min_distance = np.inf
         #TODO: for all objects, check the intersection and pick the min t.
         for object in objects:
-            dist , obj = object.intersect(self)
-            if dist < min_distance:
-                min_distance = dist
-                nearest_object = obj
+            hit = object.intersect(self)
+            if hit is not None:
+                t, intersected_object = hit
+                if epsilon < t < min_distance:
+                    min_distance = t
+                    nearest_object = intersected_object
 
         return nearest_object, min_distance
 
@@ -129,7 +130,7 @@ class Plane(Object3D):
 
     def intersect(self, ray: Ray):
         v = self.point - ray.origin
-        t = np.dot(v, self.normal) / (np.dot(self.normal, ray.direction) + 1e-6)
+        t = np.dot(v, self.normal) / (np.dot(self.normal, ray.direction) + epsilon)
         if t > 0:
             return t, self
         else:
