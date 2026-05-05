@@ -1,5 +1,5 @@
 import numpy as np
-
+from abc import ABC, abstractmethod
 
 # This function gets a vector and returns its normalized form.
 def normalize(vector):
@@ -26,22 +26,19 @@ class DirectionalLight(LightSource):
 
     def __init__(self, intensity, direction):
         super().__init__(intensity)
-        # TODO
+        self.direction = normalize(direction)
 
     # This function returns the ray that goes from the light source to a point
     def get_light_ray(self,intersection_point):
-        # TODO
-        return Ray()
+        return Ray(intersection_point, -self.direction)
 
     # This function returns the distance from a point to the light source
     def get_distance_from_light(self, intersection):
-        #TODO
-        pass
+        return np.inf
 
     # This function returns the light intensity at a point
     def get_intensity(self, intersection):
-        #TODO
-        pass
+        self.intensity
 
 
 class PointLight(LightSource):
@@ -58,34 +55,38 @@ class PointLight(LightSource):
 
     # This function returns the distance from a point to the light source
     def get_distance_from_light(self,intersection):
-        #TODO
-        pass
+        vector = intersection - self.position
+        return np.linalg.norm(vector)
 
     # This function returns the light intensity at a point
     def get_intensity(self, intersection):
         # calculate distance between light source and intersection 
         # calculate and return the light intensity based on kc, kl, kq
-        #TODO
-        pass
-
+        distance = self.get_distance_from_light(intersection)
+        return self.intensity / (self.kc + (self.kl * distance) + self.kq * (distance**2))
 
 class SpotLight(LightSource):
     def __init__(self, intensity, position, direction, kc, kl, kq):
         super().__init__(intensity)
-        # TODO
+        self.position = np.array(position)
+        self.direction = normalize(direction)
+        self.kc = kc
+        self.kl = kl
+        self.kq = kq
 
     # This function returns the ray that goes from the light source to a point
     def get_light_ray(self, intersection):
-        #TODO
-        pass
+        return Ray(self.position, normalize(intersection - self.position))
+        
 
     def get_distance_from_light(self, intersection):
-        #TODO
-        pass
+        vector = intersection - self.position
+        return np.linalg.norm(vector)
 
     def get_intensity(self, intersection):
-        #TODO
-        pass
+        vector = normalize(intersection - self.position)
+        distance = self.get_distance_from_light(intersection)
+        return (self.intensity * (vector @ self.direction)) / (self.kc + (self.kl * distance) + self.kq * (distance**2))
 
 
 class Ray:
@@ -105,11 +106,11 @@ class Ray:
             if dist < min_distance:
                 min_distance = dist
                 nearest_object = obj
-                
+
         return nearest_object, min_distance
 
 
-class Object3D:
+class Object3D(ABC):
     def set_material(self, ambient, diffuse, specular, shininess, reflection):
         self.ambient = ambient
         self.diffuse = diffuse
@@ -117,6 +118,9 @@ class Object3D:
         self.shininess = shininess
         self.reflection = reflection
 
+    @abstractmethod
+    def intersect(self, ray:Ray):
+        pass
 
 class Plane(Object3D):
     def __init__(self, normal, point):
