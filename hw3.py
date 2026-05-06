@@ -20,7 +20,6 @@ def render_scene(camera, ambient, lights, objects, screen_size, max_depth):
 
             # This is the main loop where each pixel color is computed.
             # TODO
-            hit_point = 
 
             
             # We clip the values between 0 and 1 so all pixel values will make sense.

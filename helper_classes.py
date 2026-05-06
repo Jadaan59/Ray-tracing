@@ -108,7 +108,7 @@ class Ray:
                     min_distance = t
                     nearest_object = intersected_object
 
-        return nearest_object, min_distance
+        return min_distance, nearest_object
 
 
 class Object3D(ABC):
@@ -217,19 +217,51 @@ A /&&&&&&&&&&&&&&&&&&&&\ B &&&/ C
                 [0,1,3],
                 [1,2,3],
                 [0,3,2],
-                 [4,1,0],
-                 [4,2,1],
-                 [2,4,0]]
-        # TODO
+                [4,1,0],
+                [4,2,1],
+                [2,4,0]]
+        # treat every triplet as a triangle face so 
+
+        for idx in t_idx:
+
+            # Grab the actual 3D points from v_list using the indices
+            p1 = self.v_list[idx[0]]
+            p2 = self.v_list[idx[1]]
+            p3 = self.v_list[idx[2]]
+
+            face = Triangle(p1,p2,p3)
+            l.append(face)
+
         return l
 
     def apply_materials_to_triangles(self):
-        # TODO
-        pass
+        for triangle in self.triangle_list:
+            triangle.set_material(
+                self.ambient,
+                self.diffuse,
+                self.specular,
+                self.shininess,
+                self.reflection
+            )
 
     def intersect(self, ray: Ray):
-        # TODO
-        pass
+        nearest_face = None
+        min_distance = np.inf
+
+        for triangle in self.triangle_list:
+            hit = triangle.intersect(ray)
+            if hit is not None:
+                t, intersected_object = hit
+                if epsilon < t < min_distance:
+                    min_distance = t
+                    nearest_face = intersected_object
+
+        #If we hit nothing
+        if nearest_face is None:
+            return None
+        
+        return  min_distance, nearest_face
+
 
 class Sphere(Object3D):
     def __init__(self, center, radius: float):
@@ -237,6 +269,27 @@ class Sphere(Object3D):
         self.radius = radius
 
     def intersect(self, ray: Ray):
-        #TODO
-        pass
+        ray_vector = ray.origin - self.center
 
+        #Calculate the coefficients of the quadratic equation after substitute the vector equation in sphere
+        a = ray.direction @ ray.direction
+        b = 2.0 * (ray.direction @ ray_vector)
+        c = (ray_vector @ ray_vector) - (self.radius ** 2)
+
+        # Calculate the discriminant
+        discriminant = (b ** 2) - (4 * a * c)
+        if discriminant < 0:
+            return None # No intersection
+        sqrt = np.sqrt(discriminant)
+        intersection_point1 = (-b - sqrt) / (2 * a)
+        intersection_point2 = (-b + sqrt) / (2 * a)
+
+        # Since point1 is calculated with subtraction, it will always be smaller than point2. 
+        if intersection_point1 > epsilon:
+            return intersection_point1, self
+        
+        if intersection_point2 > epsilon:
+            return intersection_point2, self
+        
+        # If both are negative, the entire sphere is behind the camera
+        return None
