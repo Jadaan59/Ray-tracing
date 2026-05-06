@@ -3,7 +3,10 @@ from abc import ABC, abstractmethod
 epsilon = 1e-6
 # This function gets a vector and returns its normalized form.
 def normalize(vector):
-    return vector / np.linalg.norm(vector)
+    norm = np.linalg.norm(vector)
+    if norm == 0:
+        return vector
+    return vector / norm
 
 
 # This function gets a vector and the normal of the surface it hit
@@ -38,7 +41,7 @@ class DirectionalLight(LightSource):
 
     # This function returns the light intensity at a point
     def get_intensity(self, intersection):
-        self.intensity
+        return self.intensity
 
 
 class PointLight(LightSource):
@@ -265,7 +268,7 @@ A /&&&&&&&&&&&&&&&&&&&&\ B &&&/ C
 
 class Sphere(Object3D):
     def __init__(self, center, radius: float):
-        self.center = center
+        self.center = np.array(center)
         self.radius = radius
 
     def intersect(self, ray: Ray):
