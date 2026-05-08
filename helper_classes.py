@@ -1,5 +1,4 @@
 import numpy as np
-from abc import ABC, abstractmethod
 epsilon = 1e-6
 # This function gets a vector and returns its normalized form.
 def normalize(vector):
@@ -48,7 +47,7 @@ class LightSource:
     def __init__(self, intensity):
         self.intensity = intensity
 
-
+    
 class DirectionalLight(LightSource):
 
     def __init__(self, intensity, direction):
@@ -119,7 +118,6 @@ class SpotLight(LightSource):
 
 
 
-construct_reflected_ray
 
 class Ray:
     def __init__(self, origin, direction):
@@ -143,7 +141,7 @@ class Ray:
         return min_distance, nearest_object
 
 
-class Object3D(ABC):
+class Object3D:
     def set_material(self, ambient, diffuse, specular, shininess, reflection):
         self.ambient = ambient
         self.diffuse = diffuse
@@ -151,7 +149,7 @@ class Object3D(ABC):
         self.shininess = shininess
         self.reflection = reflection
 
-    @abstractmethod
+    
     def intersect(self, ray:Ray):
         pass
 
