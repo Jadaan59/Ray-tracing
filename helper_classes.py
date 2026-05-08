@@ -20,6 +20,30 @@ def reflected(vector, axis):
 ## Lights
 
 
+
+# ====== Snell's law function =======
+
+# This function gets a ray, the intersection point and the normal of the surface
+# This function returns the ray that refracts from the surface
+# Using Snell's Law: n1 * sin(theta1) = n2 * sin(theta2)
+# n1 is the refractive index of the material the ray is coming from,
+# and n2 is the refractive index of the material the ray is entering.
+# theta1 is the angle between the normal and the ray before the refraction,
+# and theta2 is the angle between the normal and the ray after the refraction.
+# The function should return None if the refraction is impossible (total internal reflection)
+def construct_refracted_ray(ray, intersection_point, normal, refractive_index=1.5):
+    n1 = ray.refractive_index
+    n2 = refractive_index if refractive_index != 0 else epsilon
+    n_dot_v = np.dot(normal, ray.direction)
+    ratio = n1 / n2
+    k = np.sqrt(n_dot_v ** 2 + (1 / ratio) ** 2 - 1) - n_dot_v
+    if k < 0:
+        return None
+    refracted_direction = ratio * (k * normal + ray.direction)
+    return Ray(intersection_point, refracted_direction)
+
+
+
 class LightSource:
     def __init__(self, intensity):
         self.intensity = intensity
@@ -93,6 +117,9 @@ class SpotLight(LightSource):
         distance = self.get_distance_from_light(intersection)
         return (self.intensity * (vector @ self.direction)) / (self.kc + (self.kl * distance) + self.kq * (distance**2))
 
+
+
+construct_reflected_ray
 
 class Ray:
     def __init__(self, origin, direction):
