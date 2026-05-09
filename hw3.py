@@ -1,6 +1,68 @@
 from helper_classes import *
 import matplotlib.pyplot as plt
 
+def get_normal(obj, point):
+    """
+    Helper function to get the normal vector of an object at a specific point.
+    """
+    if isinstance(obj, Sphere):
+        # Normal of a sphere is the normalized vector from center to the surface point
+        return normalize(point - obj.center)
+    elif isinstance(obj, Plane) or isinstance(obj, Triangle):
+        # Plane and Triangle have a constant normal
+        return obj.normal
+    return np.zeros(3)
+
+def is_unblocked(intersection_point, normal, light, objects):
+    """
+    Checks if the path from the intersection point to the light source is unblocked (Shadow checking).
+    """
+    light_ray = light.get_light_ray(intersection_point)
+    # The light_ray points from the light TO the surface, so we reverse it to get vector L
+    L = normalize(-light_ray.direction)
+    
+    # Nudge the origin slightly along the normal to avoid self-intersection (Shadow Acne)
+    shadow_origin = intersection_point + normal * epsilon
+    shadow_ray = Ray(shadow_origin, L)
+    
+    hit_dist, hit_obj = shadow_ray.nearest_intersected_object(objects)
+    dist_to_light = light.get_distance_from_light(intersection_point)
+    
+    # If the shadow ray hit something, and it's CLOSER than the light source, we are in shadow
+    if hit_obj is not None and hit_dist < dist_to_light:
+        return False
+    return True
+
+def get_diffuse_specular(intersection_point, normal, view_ray, light, obj):
+    """
+    Calculates the Diffuse and Specular components of the Phong reflection model.
+    """
+    light_ray = light.get_light_ray(intersection_point)
+    L = normalize(-light_ray.direction) # Vector from surface to light
+    N = normal
+    V = normalize(-view_ray.direction)  # Vector from surface to camera
+    
+    intensity = light.get_intensity(intersection_point)
+    
+    # Diffuse Component
+    n_dot_l = np.dot(N, L)
+    if n_dot_l <= 0:
+        return np.zeros(3) # Light is hitting the back of the surface
+    
+    diffuse = np.array(obj.diffuse) * n_dot_l * intensity
+    
+    # Specular Component
+    # We use the reflected helper function. The incident ray is -L.
+    R = normalize(reflected(-L, N))
+    v_dot_r = np.dot(V, R)
+    
+    specular = np.zeros(3)
+    if v_dot_r > 0:
+        specular = np.array(obj.specular) * (v_dot_r ** obj.shininess) * intensity
+        
+    return diffuse + specular
+
+
 def render_scene(camera, ambient, lights, objects, screen_size, max_depth):
     width, height = screen_size
     ratio = float(width) / height
@@ -16,88 +78,87 @@ def render_scene(camera, ambient, lights, objects, screen_size, max_depth):
             direction = normalize(pixel - origin)
             ray = Ray(origin, direction)
 
-            # This is the main loop where **each pixel** color is computed.
-            # Find intersection point and object.
-            intersection = ray.nearest_intersected_object(objects)
-            # If no intersection, we color the pixel black (no intersection = no light hitting the pixel = black)
-            if intersection is None:
+            # Find nearest intersection
+            min_distance, nearest_object = ray.nearest_intersected_object(objects)
+            
+            # If no intersection, color the pixel black
+            if nearest_object is None:
                 color = np.zeros(3)
-            # Otherwise, compute the color of intersection point
             else:
-                color = get_color(ambient, lights, objects, max_depth, ray, intersection, 1)
-            # We clip the values between 0 and 1 so all pixel values will make sense
+                color = get_color(ambient, lights, objects, max_depth, ray, min_distance, nearest_object, 1)
+            
+            # Clip the values between 0 and 1
             image[i, j] = np.clip(color, 0, 1)
 
     return image
 
-# If the object is reflective, we recursively compute the color of the reflected ray.
-# The depth of the recursion is limited by the max_depth parameter.
-# The color is then added to the pixel color.
-def get_color(ambient, lights, objects, max_depth, ray, intersection, depth):
-    # The intersection information is a tuple containing the intersection point, the "t" and the object.
-    intersection_point, intersection_t, min_obj = intersection
-    # Get the normal at the intersection point
-    normal = min_obj.get_normal(intersection_point)
-    # To avoid self-intersection, we move the intersection point a little bit along the normal.
-    intersection_point += normal * epsilon
-    # The color of the pixel is initialized with 0
-    color = np.zeros(3)
-    # Next, we calculate Diffuse & Specular color
-    # We only consider the lights that are not blocked by any object.
-    unblocked_lights = [light for light in lights if light.is_unblocked(intersection_point, normal, objects)]
-    if unblocked_lights:
-        # For each unblocked light, we calculate the diffuse and specular color.
-        sum_d_s_color_list = [light.sum_diffuse_specular_color(min_obj, intersection_point, normal, ray.direction) for light in unblocked_lights]
-        # The color of the pixel is initialized with the ambient color, given the object's properties.
-        color = min_obj.get_ambient_color(ambient)
-        # We add the sum of the diffuse and specular colors to the pixel color.
-        sum_d_s_color = np.sum(sum_d_s_color_list, axis=0)
-        color += sum_d_s_color
 
-    # If we reached the maximum depth, we return the pixel color.
-    depth += 1
-    if depth > max_depth:
-        return color
+def get_color(ambient, lights, objects, max_depth, ray, min_distance, min_obj, depth):
+    # Calculate the exact 3D intersection point
+    intersection_point = ray.origin + min_distance * ray.direction
+    normal = get_normal(min_obj, intersection_point)
+    
+    # Start with the Ambient Color
+    color = np.array(ambient) * np.array(min_obj.ambient)
+    
+    # Add Diffuse & Specular from all unblocked light sources
+    for light in lights:
+        if is_unblocked(intersection_point, normal, light, objects):
+            color += get_diffuse_specular(intersection_point, normal, ray, light, min_obj)
+    
+    # If we haven't reached the recursion limit, handle reflections and refractions
+    if depth < max_depth:
+        # Reflection
+        if min_obj.reflection > 0:
+            reflect_dir = normalize(reflected(ray.direction, normal))
+            # Nudge origin outside to prevent self-intersection
+            reflect_origin = intersection_point + normal * epsilon
+            reflect_ray = Ray(reflect_origin, reflect_dir)
+            
+            r_dist, r_obj = reflect_ray.nearest_intersected_object(objects)
+            if r_obj is not None:
+                r_color = get_color(ambient, lights, objects, max_depth, reflect_ray, r_dist, r_obj, depth + 1)
+                color += r_color * min_obj.reflection
 
-    # If the object is reflective, recursively compute the color of the reflected ray
-    if min_obj.reflection > 0:
-        r_ray = construct_refracted_ray(ray, intersection_point, normal)
-        r_intersection = r_ray.nearest_intersected_object(objects)
-        if r_intersection is not None:
-            r_color = get_color(ambient, lights, objects, max_depth, r_ray, r_intersection, depth)
-            color += r_color * min_obj.reflection
-
-    # If the object is refractive, recursively compute the color of the refracted ray
-    if min_obj.refraction > 0:
-        t_ray = construct_refracted_ray(ray, intersection_point, normal, min_obj.refractive_index)
-        t_intersection = t_ray.nearest_intersected_object(objects)
-        if t_intersection is not None:
-            t_color = get_color(ambient, lights, objects, max_depth, t_ray, t_intersection, depth)
-            color += t_color * min_obj.refraction
+        # Refraction (Scene 6) - Using dynamic transparency attribute if it exists
+        transparency = getattr(min_obj, "transparency", 0)
+        if transparency > 0:
+            # Nudge origin INSIDE the object
+            refract_origin = intersection_point - normal * epsilon 
+            # Relaxed version: ray continues in the exact same direction
+            refract_ray = Ray(refract_origin, ray.direction)
+            
+            t_dist, t_obj = refract_ray.nearest_intersected_object(objects)
+            if t_obj is not None:
+                t_color = get_color(ambient, lights, objects, max_depth, refract_ray, t_dist, t_obj, depth + 1)
+                # Blend the current color and the refracted color
+                color = color * (1 - transparency) + t_color * transparency
 
     return color
 
 
-
-
-
 def your_own_scene():
-    bubble_material = ([0.05, 0.05, 0.025], [0.05, 0.05, 0.025], [0.1, 0.1, 0.1], 100, 0.7, 0.9, 1.5)
-    bubble_a = Sphere([-0.5, 0, -0.5],0.45)
-    bubble_a.set_material(*bubble_material)
-    bubble_b = Sphere([0.5, 0, -0.5],0.45)
-    bubble_b.set_material(*bubble_material)
-    plane_a = Plane([0,1,0],[0,-1,0])
+    # Fixed parameters: set_material takes exactly 5 parameters. Transparency is added dynamically.
+    bubble_a = Sphere([-0.5, 0, -0.5], 0.45)
+    bubble_a.set_material([0.05, 0.05, 0.025], [0.05, 0.05, 0.025], [0.1, 0.1, 0.1], 100, 0.7)
+    bubble_a.transparency = 0.9  # Set transparency directly for scene 6 logic
+    
+    bubble_b = Sphere([0.5, 0, -0.5], 0.45)
+    bubble_b.set_material([0.05, 0.05, 0.025], [0.05, 0.05, 0.025], [0.1, 0.1, 0.1], 100, 0.7)
+    bubble_b.transparency = 0.9
+
+    plane_a = Plane([0, 1, 0], [0, -1, 0])
     plane_a.set_material([0.7, 0.2, 0.35], [0.7, 0.2, 0.35], [1, 1, 1], 10, 0.5)
-    plane_b = Plane([0,0,1], [0,0,-3])
+    
+    plane_b = Plane([0, 0, 1], [0, 0, -3])
     plane_b.set_material([0.7, 0.36, 0.38], [0.7, 0.36, 0.38], [1, 1, 1], 10, 0.5)
 
-    objects = [bubble_a,bubble_b,plane_a,plane_b]
+    objects = [bubble_a, bubble_b, plane_a, plane_b]
 
     # add the 2 lights sources
-    p_light = PointLight(intensity= np.array([1, 1, 1]),position=np.array([0,1,1]),kc=0.1,kl=0.1,kq=0.1)
-    d_light = DirectionalLight(intensity= np.array([1, 1, 0.56]),direction=np.array([1,1,1]))
+    p_light = PointLight(intensity=np.array([1, 1, 1]), position=np.array([0, 1, 1]), kc=0.1, kl=0.1, kq=0.1)
+    d_light = DirectionalLight(intensity=np.array([1, 1, 0.56]), direction=np.array([1, 1, 1]))
     lights = [p_light, d_light]
 
-    camera = np.array([0,0,1])
+    camera = np.array([0, 0, 1])
     return camera, lights, objects
